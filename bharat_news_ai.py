@@ -121,6 +121,7 @@ INTL    = [
 
 # ── ttl=600 (10 min) + date in query ─────────────────────────────
 @st.cache_data(ttl=600, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def fetch_all_news():
     key = get_key("TAVILY_API_KEY")
     if not key:
@@ -142,28 +143,55 @@ def fetch_all_news():
         "rosera":        [],
     }
 
-    # Call 1 — National + International
+    INTL = [
+        "usa","united states","china","russia","europe",
+        "united kingdom","pakistan","war","ukraine","nato",
+        "israel","gaza","united nations","g20","imf",
+        "world bank","foreign minister","diplomat","sanctions",
+        "bilateral","global","international","trump","xi jinping",
+        "vladimir putin","elon musk","white house","pentagon"
+    ]
+
+    SPORTS = [
+        "cricket","ipl","wicket","batting","bowling","odi","t20",
+        "icc","bcci","football","fifa","tennis","badminton",
+        "hockey","olympics","sports","tournament","medal","squad",
+        "innings","run rate","world cup","league","player",
+        "match score","rohit","kohli","bumrah","dhoni"
+    ]
+
+    FINANCE = [
+        "nse","bse","sensex","nifty","stock market","share price",
+        "rupee","rbi","inflation","interest rate","ipo","sebi",
+        "profit","earnings","forex","economy","crude oil",
+        "gold price","mutual fund","budget","fiscal","quarterly",
+        "gdp","trade deficit","current account","repo rate"
+    ]
+
+    # ── Call 1 — ONLY National + International ────────────────────
+    # Query deliberately has NO sports/finance/Bihar terms
+    # So results will be purely governance/politics/world affairs
     try:
         r1 = client.search(
             query=(
                 f"India breaking news {day_name} {today_str} {hour_str} "
-                f"Modi government parliament policy minister "
-                f"world international diplomacy foreign latest"
+                f"government parliament Modi minister policy "
+                f"world international diplomacy geopolitics"
             ),
             search_depth="advanced",
             max_results=15,
             days=1
         )
-        results = sorted(
-            [a for a in r1.get("results", []) if not is_junk(a)],
+        for a in sorted(
+            [x for x in r1.get("results", []) if not is_junk(x)],
             key=lambda x: x.get("published_date", "") or "",
             reverse=True
-        )
-        for a in results:
+        ):
             t = (
                 (a.get("title",   "") or "") + " " +
                 (a.get("content", "") or "")
             ).lower()
+            # Strict: only intl or national from this call
             if any(k in t for k in INTL):
                 cats["international"].append(a)
             else:
@@ -171,45 +199,53 @@ def fetch_all_news():
     except:
         pass
 
-    # Call 2 — Finance + Sports + Regional
+    # ── Call 2 — ONLY Finance + Sports + Regional ─────────────────
+    # Query has NO national/international politics terms
+    # So results will be purely markets/sports/Bihar
     try:
         r2 = client.search(
             query=(
                 f"India breaking news {day_name} {today_str} {hour_str} "
-                f"stock market NSE BSE cricket IPL sports "
-                f"Bihar Patna Samastipur Rosera latest"
+                f"NSE BSE Sensex Nifty stock market economy "
+                f"cricket IPL match score "
+                f"Bihar Patna Samastipur Rosera"
             ),
             search_depth="advanced",
             max_results=20,
             days=2
         )
-        results = sorted(
-            [a for a in r2.get("results", []) if not is_junk(a)],
+        for a in sorted(
+            [x for x in r2.get("results", []) if not is_junk(x)],
             key=lambda x: x.get("published_date", "") or "",
             reverse=True
-        )
-        for a in results:
+        ):
             t = (
                 (a.get("title",   "") or "") + " " +
                 (a.get("content", "") or "") + " " +
                 (a.get("url",     "") or "")
             ).lower()
+            # Regional first — most specific
             if "rosera" in t:
                 cats["rosera"].append(a)
             elif "samastipur" in t:
                 cats["samastipur"].append(a)
             elif "bihar" in t or "patna" in t:
                 cats["bihar"].append(a)
+            # Then sports
             elif any(k in t for k in SPORTS):
                 cats["sports"].append(a)
+            # Then finance
             elif any(k in t for k in FINANCE):
                 cats["finance"].append(a)
+            # Leftover from call 2 goes to finance
+            # (since query was finance/sports focused)
             else:
-                cats["national"].append(a)
+                cats["finance"].append(a)
     except:
         pass
 
     return cats
+
 
 
 def to_json(articles):
